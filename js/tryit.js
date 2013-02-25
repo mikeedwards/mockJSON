@@ -45,7 +45,7 @@ $(document).ready(function() {
     $('#button-generate').click(function() {
         try {
             var json = jQuery.parseJSON($('#template textarea').val());
-            $.mockJSON(/mockme\.json/, json);
+            $.mockJSON(/mockme\.json/, json, 0);
             //alert(formatJSON(template));
             //$('#template textarea').val(formatJSON(template));
         
