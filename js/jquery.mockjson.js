@@ -1,9 +1,32 @@
+/*jslint browser: true, regexp: true, sloppy: true, indent: 4, maxerr: 50 */
 /*global jQuery: false */
 ;(function($) {
 
 var _mocked = [],
     _original_ajax = $.ajax,
     _random_numbers = [0.021768910889510606,0.23762323165420307,0.9079616118204306,0.6534305309997466,0.22049697572443694,0.07687466163364898,0.8017428775547905,0.16165353264404825,0.5124345671670483,0.19337327636624613,0.39963994200698416,0.8012592654139514,0.22474962687229938,0.9791396234452399,0.7965428353317756,0.9777664340629622,0.5135216702983731,0.7407128236192145,0.12880984991420075,0.8186600800491484,0.5187691445438851,0.034723021925916586,0.5625092833040853,0.02502838571997701,0.663696305503698,0.3481608684353138,0.8991623585175106,0.3640542564277087,0.8320766874121723,0.012778915627689846,0.1427680370061336,0.9774408289203956,0.010229381207667587,0.2596610885223093,0.6150540104297127,0.7130773919030915,0.8638338302974085,0.6178483032907357,0.980312844391733,0.5007277415012348,0.6348672031113127,0.4400097775503303,0.8468458451408212,0.38724997893647317,0.690237920987028,0.19850102297146477,0.44895115941315766,0.22283381913760725,0.031228117310125314,0.3367510872581615,0.28155752394210787,0.14696694832580504,0.08164635161760991,0.8837733477785624,0.4590179148539142,0.9613195413217465,0.11263127577456922,0.743695635896287,0.0002424891439143373,0.1964622832546613,0.7333363138878922,0.5575568682003356,0.20426374168098604,0.18030934250338893,0.9792636408392759,0.30121911048336913,0.7734906886720265,0.6984051127767527,0.6638058511379343,0.3310956256388182,0.36632372827973203,0.8996494702333895,0.8235917663049763,0.418496734118911,0.8164648495097332,0.9457831606354686,0.2845227542117049,0.42374718399151545,0.3431728911657228,0.5289314006219973,0.6029243600407113,0.6528301140700757,0.6948768236197832,0.7887302784092911,0.8950274196119906,0.6121642239166305,0.31797481561514696,0.34903732589844216,0.3580320092281766,0.8312225728434115,0.32331010157206974,0.16395388672837796,0.6072960306003872,0.6580526967999424,0.23472961545632742,0.6138637855489343,0.3067303339060682,0.44935935129958315,0.24729465243280668,0.8244189715967711];
+
+// Returns an object of query string parameters for a given URL
+function parseQueryString(url) {
+    var pairs,
+        i,
+        p,
+        qpos = url.indexOf("?"),
+        query_string = {};
+
+    if ( qpos !== -1 ) {
+        pairs = url.substring(qpos + 1).split("&");
+
+        for ( i in pairs ) {
+            if (pairs.hasOwnProperty(i)) {
+                p = pairs[i].split("=");
+                query_string[p[0].toUpperCase()] = p[1];
+            }
+        }
+    }
+
+    return query_string;
+}
 
 function rand() {
     if ($.mockJSON.random) {
@@ -16,7 +39,7 @@ function rand() {
 
 function type(obj) {
     return $.isArray(obj)
-        ? 'array' 
+        ? 'array'
         : (obj === null)
             ? 'null'
             : typeof obj;
@@ -35,23 +58,39 @@ function randomDate() {
 }
 
 
-function getRandomData(key) {
-    var params, a, index, ret;
+function getRandomData(key, query_string) {
+    var params, pos, a, index, ret;
 
     key = key.substr(1); // remove "@"
-    
+
     params = key.match(/\(([^\)]+)\)/g) || [];
-    
-    if ($.mockJSON.data.hasOwnProperty(key)) {
-    
+
+    query_string = query_string || {};
+
+    // We can now pass a match form the url directly into our JSON.
+    // The prefix to replace is @REGEXP_MATCH_n, where n is an integer
+    // >= 0.  NB: the first grouped match is generally not useful, as
+    // javascript will always return the entire string as the first match.
+    // Group matches start at 1.
+    if ( key.substr(0, 13) === 'QUERY_STRING_' ) {
+        pos = key.substring(13);
+
+        if ( pos === '' || typeof query_string[pos] === 'undefined') {
+            ret = key;
+        } else {
+            ret = query_string[pos];
+        }
+
+    } else if ($.mockJSON.data.hasOwnProperty(key)) {
+
         a = $.mockJSON.data[key];
-        
+
         switch (type(a)) {
             case 'array':
                 index = Math.floor(a.length * rand());
                 ret = a[index];
                 break;
-                
+
             case 'function':
                 ret = a();
                 break;
@@ -80,9 +119,13 @@ $.mockJSON = function(request, template, wait) {
     _mocked.push({
         request:request,
         template:template,
-        wait: wait
+        wait: wait,
+        // This array stores pattern matches in the given URL
+        url_matches: [],
+        // This object stores query string properties
+        query_string: {}
     });
-    
+
     return $;
 };
 
@@ -91,15 +134,15 @@ $.mockJSON.data = {
     LETTER_UPPER : String.prototype.split.call('ABCDEFGHIJKLMNOPQRSTUVWXYZ', ''),
     LETTER_LOWER : String.prototype.split.call('abcdefghijklmnopqrstuvwxyz', ''),
     MALE_FIRST_NAME : ["James", "John", "Robert", "Michael", "William", "David",
-        "Richard", "Charles", "Joseph", "Thomas", "Christopher", "Daniel", 
+        "Richard", "Charles", "Joseph", "Thomas", "Christopher", "Daniel",
         "Paul", "Mark", "Donald", "George", "Kenneth", "Steven", "Edward",
         "Brian", "Ronald", "Anthony", "Kevin", "Jason", "Matthew", "Gary",
         "Timothy", "Jose", "Larry", "Jeffrey", "Frank", "Scott", "Eric"],
-    FEMALE_FIRST_NAME : ["Mary", "Patricia", "Linda", "Barbara", "Elizabeth", 
-        "Jennifer", "Maria", "Susan", "Margaret", "Dorothy", "Lisa", "Nancy", 
+    FEMALE_FIRST_NAME : ["Mary", "Patricia", "Linda", "Barbara", "Elizabeth",
+        "Jennifer", "Maria", "Susan", "Margaret", "Dorothy", "Lisa", "Nancy",
         "Karen", "Betty", "Helen", "Sandra", "Donna", "Carol", "Ruth", "Sharon",
-        "Michelle", "Laura", "Sarah", "Kimberly", "Deborah", "Jessica", 
-        "Shirley", "Cynthia", "Angela", "Melissa", "Brenda", "Amy", "Anna"], 
+        "Michelle", "Laura", "Sarah", "Kimberly", "Deborah", "Jessica",
+        "Shirley", "Cynthia", "Angela", "Melissa", "Brenda", "Amy", "Anna"],
     LAST_NAME : ["Smith", "Johnson", "Williams", "Brown", "Jones", "Miller",
         "Davis", "Garcia", "Rodriguez", "Wilson", "Martinez", "Anderson",
         "Taylor", "Thomas", "Hernandez", "Moore", "Martin", "Jackson",
@@ -173,10 +216,14 @@ $.ajax = function(url, options) {
             defer = $.Deferred();
 
             if (mock.request.test(options.url)) {
-                resp = $.mockJSON.generateFromTemplate(mock.template);
-                
+                // Store the URL matches for this request
+                mock.url_matches = options.url.match(mock.request);
+                // Store the query string parameters for this request
+                mock.query_string = parseQueryString(options.url);
+                resp = $.mockJSON.generateFromTemplate(mock.template, null, mock.query_string);
+
                 setTimeout(delay, mock.wait, options, defer, resp);
-                
+
                 defer.success = defer.done;
                 defer.error = defer.fail;
 
@@ -188,22 +235,23 @@ $.ajax = function(url, options) {
 };
 
 
-$.mockJSON.generateFromTemplate = function(template, name) {
+$.mockJSON.generateFromTemplate = function(template, name, query_string) {
     var length = 0, length_min, length_max,
         matches = (name || '').match(/\w+\|(\d+)-(\d+)/),
         generated = null,
+        _query_string = (query_string || {}),
         i, p, inc_matches, increment, keys, key;
     if (matches) {
         length_min = parseInt(matches[1], 10);
         length_max = parseInt(matches[2], 10);
         length = Math.round(rand() * (length_max - length_min)) + length_min;
     }
-        
+
     switch (type(template)) {
         case 'array':
             generated = [];
             for (i = 0; i < length; i = i + 1) {
-                generated[i] = $.mockJSON.generateFromTemplate(template[0]);
+                generated[i] = $.mockJSON.generateFromTemplate(template[0], null, _query_string);
             }
             break;
 
@@ -211,7 +259,7 @@ $.mockJSON.generateFromTemplate = function(template, name) {
             generated = {};
             for (p in template) {
                 if (template.hasOwnProperty(p)) {
-                    generated[p.replace(/\|(\d+-\d+|\+\d+)/, '')] = $.mockJSON.generateFromTemplate(template[p], p);
+                    generated[p.replace(/\|(\d+-\d+|\+\d+)/, '')] = $.mockJSON.generateFromTemplate(template[p], p, _query_string);
                     inc_matches = p.match(/\w+\|\+(\d+)/);
                     if (inc_matches && type(template[p]) === 'number') {
                         increment = parseInt(inc_matches[1], 10);
@@ -243,7 +291,7 @@ $.mockJSON.generateFromTemplate = function(template, name) {
                 keys = generated.match(/@([A-Z_0-9\(\),]+)/g) || [];
                 for (i = 0; i < keys.length; i = i + 1) {
                     key = keys[i];
-                    generated = generated.replace(key, getRandomData(key));
+                    generated = generated.replace(key, getRandomData(key, _query_string));
                 }
             } else {
                 generated = "";
