@@ -26,6 +26,13 @@ $(document).ready(function() {
             "created_time":"@TIME_HH:@TIME_MM:@TIME_SS",
             "title|2-4":"@LOREM ",
             "description":"@LOREM_IPSUM"
+        },
+        "data":{
+            "test":"@QUERY_STRING(test)",
+            "what_site": "@QUERY_STRING(site)",
+            "bar":"@URL_MATCH(0)",
+            "one_to_ten_words|1-10":"@LOREM ",
+            "exactly_five_words|5":"@LOREM "
         }
     };
 
@@ -49,7 +56,7 @@ $(document).ready(function() {
             //alert(formatJSON(template));
             //$('#template textarea').val(formatJSON(template));
 
-            $.getJSON('mockme.json?test=fun', function(json) {
+            $.getJSON('mockme.json?test=fun&site=github.com', function(json) {
                 $('#result textarea').val(formatJSON(json));
             });
         } catch(e) {

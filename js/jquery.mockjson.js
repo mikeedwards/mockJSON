@@ -20,7 +20,7 @@ function parseQueryString(url) {
         for ( i in pairs ) {
             if (pairs.hasOwnProperty(i)) {
                 p = pairs[i].split("=");
-                query_string[p[0].toUpperCase()] = p[1];
+                query_string[p[0]] = p[1];
             }
         }
     }
@@ -58,30 +58,21 @@ function randomDate() {
 }
 
 
-function getRandomData(key, query_string) {
+function getMockData(key, mock) {
     var params, pos, a, index, ret;
 
     key = key.substr(1); // remove "@"
 
-    params = key.match(/\(([^\)]+)\)/g) || [];
+    // Check to see if the key has parameters
+    params = key.match(/\(([^\)]+)\)/) || null;
+    if ( params !== null ) {
+        // If so, split the parameters by comma into an array
+        params = params[1].split(",");
+        // And remove the parameter and parentheses from the key
+        key = key.substring(0, key.indexOf("("));
+    }
 
-    query_string = query_string || {};
-
-    // We can now pass a match form the url directly into our JSON.
-    // The prefix to replace is @REGEXP_MATCH_n, where n is an integer
-    // >= 0.  NB: the first grouped match is generally not useful, as
-    // javascript will always return the entire string as the first match.
-    // Group matches start at 1.
-    if ( key.substr(0, 13) === 'QUERY_STRING_' ) {
-        pos = key.substring(13);
-
-        if ( pos === '' || typeof query_string[pos] === 'undefined') {
-            ret = key;
-        } else {
-            ret = query_string[pos];
-        }
-
-    } else if ($.mockJSON.data.hasOwnProperty(key)) {
+    if ($.mockJSON.data.hasOwnProperty(key)) {
 
         a = $.mockJSON.data[key];
 
@@ -92,7 +83,7 @@ function getRandomData(key, query_string) {
                 break;
 
             case 'function':
-                ret = a();
+                ret = a(params, mock);
                 break;
         }
     } else {
@@ -149,11 +140,11 @@ $.mockJSON.data = {
         "Thompson", "White", "Lopez", "Lee", "Gonzalez", "Harris", "Clark",
         "Lewis", "Robinson", "Walker", "Perez", "Hall", "Young", "Allen"],
     EMAIL : function() {
-        return getRandomData('@LETTER_LOWER')
+        return getMockData('@LETTER_LOWER')
             + '.'
-            + getRandomData('@LAST_NAME').toLowerCase()
+            + getMockData('@LAST_NAME').toLowerCase()
             + '@'
-            + getRandomData('@LAST_NAME').toLowerCase()
+            + getMockData('@LAST_NAME').toLowerCase()
             + '.com';
     },
     DATE_YYYY : function() {
@@ -190,6 +181,25 @@ $.mockJSON.data = {
             result.push(words[index]);
         }
         return result.join(' ');
+    },
+    QUERY_STRING: function() {
+          // Only accepts one parameter: the name of the query string var.
+          // Check for it, and return it from the data store if it's present.
+          var param = Array.prototype.slice.call(arguments[0], 0).shift().toString();
+          var query_string = arguments[1].special.QUERY_STRING;
+          if ( typeof query_string[param] !== 'undefined' ) {
+              return query_string[param];
+          }
+          return null;
+    },
+    URL_MATCH: function() {
+          // For URL matches, the parameter should be the index of the match.
+          var index = parseInt(Array.prototype.slice.call(arguments[0], 0).shift(), 10);
+          var url_match = arguments[1].special.URL_MATCH;
+          if ( typeof url_match[index] !== 'undefined' ) {
+              return url_match[index];
+          }
+          return null;
     }
 };
 
@@ -216,11 +226,14 @@ $.ajax = function(url, options) {
             defer = $.Deferred();
 
             if (mock.request.test(options.url)) {
-                // Store the URL matches for this request
-                mock.url_matches = options.url.match(mock.request);
-                // Store the query string parameters for this request
-                mock.query_string = parseQueryString(options.url);
-                resp = $.mockJSON.generateFromTemplate(mock.template, null, mock.query_string);
+                // Store special values for this request:
+                // * URL_MATCH: pattern matches from the URL given
+                // * QUERY_STRING: query string parameters in the URL
+                mock.special = {
+                    URL_MATCH: options.url.match(mock.request),
+                    QUERY_STRING: parseQueryString(options.url)
+                };
+                resp = $.mockJSON.generateFromTemplate(mock.template, null, mock);
 
                 setTimeout(delay, mock.wait, options, defer, resp);
 
@@ -235,23 +248,24 @@ $.ajax = function(url, options) {
 };
 
 
-$.mockJSON.generateFromTemplate = function(template, name, query_string) {
+$.mockJSON.generateFromTemplate = function(template, name, mock) {
     var length = 0, length_min, length_max,
-        matches = (name || '').match(/\w+\|(\d+)-(\d+)/),
+        matches = (name || '').match(/\w+\|(\d+)(-(\d+))?/),
         generated = null,
-        _query_string = (query_string || {}),
         i, p, inc_matches, increment, keys, key;
     if (matches) {
         length_min = parseInt(matches[1], 10);
-        length_max = parseInt(matches[2], 10);
-        length = Math.round(rand() * (length_max - length_min)) + length_min;
+        length_max = matches[3] !== undefined ? parseInt(matches[3], 10) : null;
+        // If there's a max length present, the length is a random number between the two.
+        // If not, we use the first parameter, which is length_min 
+        length = length_max !== null ? Math.round(rand() * (length_max - length_min)) + length_min : length_min;
     }
 
     switch (type(template)) {
         case 'array':
             generated = [];
             for (i = 0; i < length; i = i + 1) {
-                generated[i] = $.mockJSON.generateFromTemplate(template[0], null, _query_string);
+                generated[i] = $.mockJSON.generateFromTemplate(template[0], null, mock);
             }
             break;
 
@@ -259,7 +273,7 @@ $.mockJSON.generateFromTemplate = function(template, name, query_string) {
             generated = {};
             for (p in template) {
                 if (template.hasOwnProperty(p)) {
-                    generated[p.replace(/\|(\d+-\d+|\+\d+)/, '')] = $.mockJSON.generateFromTemplate(template[p], p, _query_string);
+                    generated[p.replace(/\|(\d+-\d+|\+\d+)/, '')] = $.mockJSON.generateFromTemplate(template[p], p, mock);
                     inc_matches = p.match(/\w+\|\+(\d+)/);
                     if (inc_matches && type(template[p]) === 'number') {
                         increment = parseInt(inc_matches[1], 10);
@@ -288,10 +302,10 @@ $.mockJSON.generateFromTemplate = function(template, name, query_string) {
                 for (i = 0; i < length; i = i + 1) {
                     generated += template;
                 }
-                keys = generated.match(/@([A-Z_0-9\(\),]+)/g) || [];
+                keys = generated.match(/@([A-Za-z_0-9\(\),]+)/g) || [];
                 for (i = 0; i < keys.length; i = i + 1) {
                     key = keys[i];
-                    generated = generated.replace(key, getRandomData(key, _query_string));
+                    generated = generated.replace(key, getMockData(key, mock));
                 }
             } else {
                 generated = "";
