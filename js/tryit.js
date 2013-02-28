@@ -1,7 +1,7 @@
 (function($) {
-        
+
 $(document).ready(function() {
-        
+
     var template1 = {
         "fathers|5-10":[
             {
@@ -11,7 +11,7 @@ $(document).ready(function() {
                 "sons":null,
                 'daughters|0-3':[
                     {
-                        "age|0-31":0, 
+                        "age|0-31":0,
                         "name":"@FEMALE_FIRST_NAME"
                     }
                 ]
@@ -28,53 +28,50 @@ $(document).ready(function() {
             "description":"@LOREM_IPSUM"
         }
     };
-    
+
     $('#template textarea').val(formatJSON(template1));
     $('#result textarea').val(''); // reset
-    
+
     $('#button-template1').click(function() {
         $('#template textarea').val(formatJSON(template1));
         $('#button-generate').click();
     });
-    
+
     $('#button-template2').click(function() {
         $('#template textarea').val(formatJSON(template2));
         $('#button-generate').click();
     });
-    
+
     $('#button-generate').click(function() {
         try {
             var json = jQuery.parseJSON($('#template textarea').val());
             $.mockJSON(/mockme\.json/, json, 0);
             //alert(formatJSON(template));
             //$('#template textarea').val(formatJSON(template));
-        
-            $.getJSON('mockme.json', function(json) {
+
+            $.getJSON('mockme.json?test=fun', function(json) {
                 $('#result textarea').val(formatJSON(json));
             });
         } catch(e) {
             alert('Invalid JSON');
         }
     }).click();
-    
+
     $.each($.mockJSON.data, function(keyword) {
         $('#keywords ul').append('<li><code>@' + keyword + '</code></li>');
     });
-    
+
 });
-
-
-
 
 function formatJSON(obj, indent) {
     var result = [];
     indent = (indent || '') + '  ';
     var type = $.isArray(obj)
-        ? 'array' 
+        ? 'array'
         : (obj === null)
             ? 'null'
             : typeof obj;
-            
+
     switch (type) {
         case 'object':
             result.push('{ ');
@@ -85,7 +82,7 @@ function formatJSON(obj, indent) {
             result.push(last.substr(0, last.length - 1));
             result.push('}');
             break;
-            
+
         case 'array':
             result.push('[ ');
             for (var i = 0; i < obj.length; i++) {
@@ -95,16 +92,16 @@ function formatJSON(obj, indent) {
             result.push(last.substr(0, last.length - 1));
             result.push(']');
             break;
-            
+
         case 'string':
             result.push('"' + obj + '"');
             break;
-            
+
         default:
             result.push(obj + '');
             break;
     }
-    
+
      return result.join('\n' + indent);
 }
 
